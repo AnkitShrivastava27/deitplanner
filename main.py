@@ -1,56 +1,80 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from huggingface_hub import InferenceClient
+import os
+import re
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Enable CORS for any frontend (like Flutter)
+# CORS for Flutter/frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your frontend domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Use a better free model for instruction-based generation
-model_id = "google/flan-t5-base"
-client = InferenceClient(model=model_id)
+# Hugging Face API setup (must be set in environment)
+api_key = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+client = InferenceClient(api_key=api_key)
 
-# Request schema from frontend
+# Input model for diet planning
 class DietRequest(BaseModel):
     age: int
     height_cm: float
     weight_kg: float
-    diet_goal: str  # Example: "weight loss", "muscle gain"
-    allergies: str = ""  # Optional
+    diet_goal: str
+    allergies: str = ""
 
-# BMI calculation function
+# BMI calculation
 def calculate_bmi(height_cm: float, weight_kg: float) -> float:
     height_m = height_cm / 100
     return round(weight_kg / (height_m ** 2), 2)
 
-# API endpoint
+# Endpoint using Zephyr chat model
 @app.post("/diet-plan")
 async def generate_diet_plan(request: DietRequest):
     bmi = calculate_bmi(request.height_cm, request.weight_kg)
 
-    prompt = (
-        f"Generate a healthy one-day meal plan for a {request.age}-year-old "
-        f"person who is {request.height_cm} cm tall, weighs {request.weight_kg} kg, "
-        f"has a BMI of {bmi}, goal is {request.diet_goal}, and allergies: {request.allergies or 'none'}.\n"
-        f"Please list meals: Breakfast, Lunch, Snack, Dinner with approximate calories."
+    user_prompt = (
+        f"Create a 1-day healthy meal plan for a person with the following details:\n"
+        f"- Age: {request.age}\n"
+        f"- Height: {request.height_cm} cm\n"
+        f"- Weight: {request.weight_kg} kg\n"
+        f"- BMI: {bmi}\n"
+        f"- Goal: {request.diet_goal}\n"
+        f"- Allergies: {request.allergies or 'None'}\n\n"
+        f"Respond in table format:\n"
+        f"Meal | Items | Calories (approx)\n"
+        f"-----|--------|------------------"
     )
 
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a certified dietician and nutrition expert. Your job is to give meal plans that are clear, realistic, and calorie-balanced."
+            )
+        },
+        {
+            "role": "user",
+            "content": user_prompt
+        }
+    ]
+
     try:
-        response = client.text_generation(
-            prompt=prompt,
-            max_new_tokens=256
+        response = client.chat.completions.create(
+            model="HuggingFaceH4/zephyr-7b-beta",
+            messages=messages,
+            stream=False
         )
+        final_answer = response.choices[0].message.content
+        clean_answer = re.sub(r"<think>.*?</think>", "", final_answer, flags=re.DOTALL).strip()
         return {
             "bmi": bmi,
-            "response": response.strip()
+            "response": clean_answer
         }
     except Exception as e:
         return {"error": str(e)}
