@@ -39,17 +39,23 @@ async def generate_diet_plan(request: DietRequest):
     bmi = calculate_bmi(request.height_cm, request.weight_kg)
 
     user_prompt = (
-        f"Create a 1-day healthy meal plan for a person with the following details:\n"
-        f"- Age: {request.age}\n"
-        f"- Height: {request.height_cm} cm\n"
-        f"- Weight: {request.weight_kg} kg\n"
-        f"- BMI: {bmi}\n"
-        f"- Goal: {request.diet_goal}\n"
-        f"- Allergies: {request.allergies or 'None'}\n\n"
-        f"Respond in table format:\n"
-        f"Meal | Items | Calories (approx)\n"
-        f"-----|--------|------------------"
-    )
+    f"Create a 1-day healthy meal plan for a person with the following details:\n"
+    f"- Age: {request.age}\n"
+    f"- Height: {request.height_cm} cm\n"
+    f"- Weight: {request.weight_kg} kg\n"
+    f"- BMI: {bmi}\n"
+    f"- Goal: {request.diet_goal}\n"
+    f"- Allergies: {request.allergies or 'None'}\n"
+    f"- Daily Budget: {request.budget or 'Not specified'} INR\n\n"
+    f"Constraints:\n"
+    f"- Use only Indian cuisine food items.\n"
+    f"- Keep total response under 200 words.\n"
+    f"- Suggest meals that fit within the given budget.\n"
+    f"- Respond ONLY in tabular format with these columns:\n\n"
+    f"Meal | Items | Calories (approx) | Cost (INR approx)\n"
+    f"-----|--------|------------------|------------------"
+)
+
 
     messages = [
         {
